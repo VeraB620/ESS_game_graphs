@@ -1,0 +1,207 @@
+---
+title: "Beetles, Game Theory, and Graphs"
+output: html_notebook
+---
+```{r librarys}
+library(dplyr)
+library(ggplot2)
+```
+
+Game numbers set up as in: https://www.cs.cornell.edu/home/kleinber/networks-book/networks-book-ch07.pdf
+
+------Game Set Up: Prisoner's Dilemma
+-We have two types of beetles, large and small
+-Beetles will interact and "play" on the prionsers dilemma 
+                 2
+        Small         Large
+        
+1 Small  5,5          1,8
+  
+  Large  8, 1         3,3
+  
+-2 small beetles: share fitness from the food equally
+-1 large, 1 small beetle: the larger gets the most but looses some since they waste some of the fitness because they cannot extract full fitness from food source
+-2 large: food equally shared but lots of fitness lost since they expend energy fighting another large beetle
+
+-so there really isn't a "game", since the strategies are biologicall set, small/large; so the fun in in the long term
+
+-----Nash Equilibrium and Evolitionary Stable
+-Nash equilibrium: knowing the outcomes, the strategy where you have no incentive to change
+
+-the Nash equilibrium is Large/Large because if you are small and you know your partner is large you want to switch to being large so you gain more, if you are small and your partner is small you wan to switch to large so you gaing more; if you are large, and your partner is small you stick with larger to gain the most, if you are large and your partner is large you stick with large to gain the most, ie the nash equilibrium is Large/Large, because if you know what your player will play, the best case is always to go large
+
+-The Evolitionary Stable Strategy (ESS): strategy which if adopted by a population it cannot be invaded by any alternative strategy
+-strategy T invades strategy S at level x, for some small postive x, if an x fractionof the underllying population uses T and 1-x fraction of the underlying population uses S, S is evolutionarily stabel if there is a small positive number y, such that when strategy T invades S at an level x<y, the fitness of an organism playing S is strictly greater then the fitness of an organism plying T
+
+-the ESS is the Nash equilibrium (Large/Large) in this case
+-assume for some small positive number x, a 1-x fraction of the population is Large, and x fraction of the population is small (ie a small population of small beetles invade population of large beetles)
+-expected payoff of large beetle: 3(1-x)+8x=3+5x
+-expected payoff of small beetle: 1(1-x)+5x=1+4x
+-for small x (in this case for any x), the expected fitness of the large beetle exeed the expected fitness of the small beetle, thus the large beetles are evolutionary stable
+
+-similar math is small popluation of large beetles invade population of small beetles
+-understanging:if a few large beetles are introduced into a population consisiting of small beetles, then the large beetles do well, since they rarely meet each other and get most food in almost every compeitition, so small beetles cannot drive out the large beetles
+
+!!note this result is based on two beetles interactign with each other at any given point in time, each beetle is paried off with other beetles in food competitions over the course of its lifetime and never meets the same beetle twice
+
+-----What we will do
+-set the number of beetles, both small and large
+-set the interaction network (who has the ability to meet who to compete)
+-set the amount of days played (each day is a feeding)
+-set the death rate: if a beetle is below ____ "health points" then it is dead and out of the game; health points the number of fitness they gain
+
+-see who lives at the end of the simulation
+-will differnt types of networks affect the ESS?
+
+#set up
+```{r set_up}
+num_small = 10; #number of small beetles
+num_large= 20; #number of larger beetles
+num_total= num_small+ num_large; #for building adjaceny matrixs
+days_played= 100; #number of days played
+death_rate= 300;
+  #death rate with consideration of this:
+  #max health points: 8*days_played
+  #min health points: 1*days_played ; death rate cannot be below this
+starting_fitness=0
+```
+
+#create yo beetles
+```{r beetles_classes}
+#class: keep track of fitness and strategy
+setClass("beetle", slots=list(fitness="numeric", strategy="character"))
+#list of all the beetles
+x = list()
+counter=1;
+
+#small beetles
+for (i in 1:num_small) {
+  new_beetle<- new("beetle", fitness=starting_fitness, strategy="small") #create new small beetle
+   x[[counter]]=assign(paste0("sb", i), new_beetle) #add beetle to the list
+    
+   counter = counter + 1
+}
+#large beetles
+for (j in 1:num_large) {
+  new_beetle<- new("beetle", fitness=starting_fitness, strategy="large") #create new large beetle
+   x[[counter]]= assign(paste0("lb", j), new_beetle)#add beetle to the list
+   
+    counter = counter + 1
+}
+```
+
+#Set up adjacent matrix
+```{r set_up_adjaceny_matrix_complete_graph}
+#ranodom adjaceny matrix of 1's and 0'1
+#not that idividuales can feel with them selves or not
+r=num_total;
+c=num_total;
+adj_mat<- matrix( 1,
+ r,
+ c
+)
+
+diag(adj_mat) <- 0
+
+rownames(adj_mat) <- paste0('beetle_', 1:num_total)
+colnames(adj_mat) <- paste0('beetle_', 1:num_total)
+```
+
+#Play
+```{r game_function}
+#days played counter
+days<-days_played;
+
+#while loops, run everything for each day 
+while(days > 0){
+adj_mat_updater<- adj_mat; #each day the feeding amrix is reset
+feedings_day = ceiling(num_total/2); 
+cols<- c;
+  
+  #while loop for each day of feeding
+  while (feedings_day > 1){
+    possibility<- NULL;
+
+  #------take the beetle in the top row and pick which beetle it feeds against
+    for(col in 1:cols) {
+        if (adj_mat_updater[1,col] == 1){
+          possibility <-append(possibility, col) #list of the columns that the beetle can potentionally feed with
+        }
+    }
+    
+    p_2_picker <- sample(1:length(possibility), 1) #pick a random index for the possibility list
+    p_2_pick<- possibility[p_2_picker] #beetle in top row, feeds with beetle in column p_2_pick
+  #------
+  
+  #-----extracts which beetles are playing, ie know the column and row index which beetles are those specifically
+  player_1<- rownames(adj_mat_updater)[1]
+  player_2<-colnames(adj_mat_updater)[p_2_pick]
+  
+  player_1_name<-unlist(strsplit(player_1, "_"))
+  player_2_name<-unlist(strsplit(player_2, "_"))
+  p_1<-as.numeric(player_1_name[[2]])
+  p_2<-as.numeric(player_2_name[[2]])
+   #-----
+  
+  
+   #-----Game-----
+    if (x[[p_1]]@strategy == "small"  & x[[p_2]]@strategy == "small"){
+      x[[p_1]]@fitness = x[[p_1]]@fitness + 5
+       x[[p_2]]@fitness = x[[p_2]]@fitness + 5
+    } else if (x[[p_1]]@strategy == "small"  & x[[p_2]]@strategy == "large"){
+      x[[p_1]]@fitness = x[[p_1]]@fitness + 1
+       x[[p_2]]@fitness = x[[p_2]]@fitness + 8
+    } else if (x[[p_1]]@strategy == "large"  & x[[p_2]]@strategy == "small"){
+      x[[p_1]]@fitness = x[[p_1]]@fitness + 8
+       x[[p_2]]@fitness = x[[p_2]]@fitness + 1
+    }else {
+      x[[p_1]]@fitness = x[[p_1]]@fitness + 3
+       x[[p_2]]@fitness = x[[p_2]]@fitness + 3
+    }
+  #-------
+  
+  #delete the rows and columns of the beetles who fed so they cant feed again
+  adj_mat_updater<- adj_mat_updater[-p_2_pick,-p_2_pick]
+  adj_mat_updater<-adj_mat_updater[-1,-1]
+
+feedings_day=feedings_day-1
+cols=cols-2
+  }
+
+days=days-1
+}
+```
+
+#Make a data fram with the end results
+```{r df}
+strategy<- c()
+fitness<- c()
+beetle<- c()
+for (i in 1:num_total){
+  beetle<- c(beetle, paste0("beetle", i))
+  strategy<- c(strategy, x[[i]]@strategy)
+  fitness<- c(fitness, x[[i]]@fitness)
+}
+
+df <- data.frame("beetle" = beetle, "strategy" = strategy, "fitness" = fitness, stringsAsFactors = FALSE)
+```
+
+#Graping the Results
+```{r data_analysis}
+#3+5x, 1+4x- expected for never meeting a beetle more then once
+#x= num_small/num_total
+lint= (3+5*(num_small/num_total))*days_played;
+sint=(1+4*(num_small/num_total))*days_played;
+p1<-df %>%
+  ggplot(
+    aes(x=beetle, y=fitness, fill=strategy)
+    ) +
+  geom_bar(stat = "identity") +
+  geom_hline(yintercept=death_rate, color = "red")+
+  geom_hline(yintercept=lint, linetype="dashed", color = "blue")+ #large beetle expected
+  geom_hline(yintercept=sint, linetype="dashed", color = "green")+ #small beetle expected
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  
+p1
+```
+
